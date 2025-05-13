@@ -1,0 +1,55 @@
+- name: Get vector distrib
+  ansible.builtin.get_url:
+    url: "https://packages.timber.io/vector/{{ vector_version }}/vector_{{ vector_version }}-1_amd64.deb"
+    dest: "/tmp/vector-{{ vector_version }}.deb"
+    mode: "0644"
+  tags:
+    - vector
+    - packages
+
+- name: Update apt cache
+  ansible.builtin.apt:
+    update_cache: true
+
+- name: Install vector packages
+  ansible.builtin.command:
+    cmd: "dpkg -i /tmp/vector-{{ vector_version }}.deb"
+  changed_when: false
+  tags:
+    - vector
+    - packages
+    - install
+
+- name: Create systemd unit for Vector
+  ansible.builtin.template:
+    src: templates/vector.service.j2
+    dest: /etc/systemd/system/vector.service
+    mode: 0644
+  register: vector_service_created
+
+- name: Reload systemd after creating unit
+  ansible.builtin.systemd:
+    daemon_reload: yes
+  when: vector_service_created.changed
+
+- name: Enable Vector service
+  ansible.builtin.systemd:
+    name: vector
+    enabled: yes
+
+- name: Deploy vector configuration
+  ansible.builtin.template:
+    src: templates/vector.j2
+    dest: "{{ vector_config_path }}"
+    mode: "0644"
+  notify: Start vector service
+  tags:
+    - vector
+    - packages
+    - install
+
+- name: Flush handlers
+  ansible.builtin.meta: flush_handlers
+  tags:
+    - vector
+    - restart service
